@@ -3,15 +3,17 @@ import sqlite3
 
 
 def create_db_connection() -> sqlite3.Connection:
-    con = sqlite3.connect(
-        "db/project.db")
-
-    con.row_factory = sqlite3.Row
-    return con
+    try:
+        con = sqlite3.connect("./db/project.db")
+        print("connected to DB")
+        con.row_factory = sqlite3.Row
+        return con
+    except sqlite3.Error as e:
+        print(e)
+        raise e
 
 
 connection = create_db_connection()
-print("connected to DB")
 
 
 def create_issue_table():
@@ -26,7 +28,8 @@ def create_issue_table():
     CreatorLogin text NOT NULL,
     Status  text NOT NULL,
     ClosedAt  text,
-    CreatedAt text NOT NULL
+    CreatedAt text NOT NULL,
+    RefIssue text
 );'''
     res = connection.execute(query, [])
     return res
@@ -36,8 +39,8 @@ def create_issue_table():
 def insert_issues(issues):
     # query = f'INSERT INTO Issues VALUES ({("?," * len(issues[0]))[:-1]});'
     query = """INSERT INTO 
-    Issues (IssueID, Owner, Repo, AssigneeLogin, Title, Body, CreatorLogin, Status, ClosedAt, CreatedAt) 
-    VALUES (:IssueID, :Owner, :Repo, :AssigneeLogin, :Title, :Body, :CreatorLogin, :Status, :ClosedAt, :CreatedAt) """
+    Issues (IssueID, Owner, Repo, AssigneeLogin, Title, Body, CreatorLogin, Status, ClosedAt, CreatedAt, RefIssue) 
+    VALUES (:IssueID, :Owner, :Repo, :AssigneeLogin, :Title, :Body, :CreatorLogin, :Status, :ClosedAt, :CreatedAt, :RefIssue) """
     cursor = connection.cursor()
     cursor.executemany(query, issues)
     connection.commit()
@@ -48,7 +51,7 @@ def count_issues_by_assignee():
     return connection.cursor().execute(query, []).fetchall()
 
 
-def get_issues_from_to_id(owner, repo, start_id, end_id):
+def get_issues_from_to_id(start_id, end_id):
     query = "SELECT * FROM Issues WHERE  IssueId >= ? AND IssueId < ?"
     res = connection.cursor().execute(query, [start_id, end_id]).fetchall()
     res = [dict(row) for row in res]

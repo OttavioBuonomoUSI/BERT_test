@@ -3,6 +3,8 @@ import tensorflow_text as text
 import tensorflow_hub as hub
 from typing import Union
 
+from official.nlp import optimization
+
 tf.get_logger().setLevel('ERROR')
 
 map_name_to_handle = {
@@ -181,12 +183,14 @@ class BertCustomizer():
                  bert_model_name: str = 'bert_en_uncased_L-12_H-768_A-12',
                  info: Union[dict, None] = None,
                  show_info: bool = True,
-                 custom_model=None):
+                 custom_model=None,
+                 batch_size=32):
 
         self.show_info = show_info
         self.tfhub_handle_encoder = map_name_to_handle[bert_model_name]
         self.tfhub_handle_preprocess = map_model_to_preprocess[bert_model_name]
         self.model = custom_model
+        self.batch_size = batch_size
 
         if info != None:
             self.info = info
@@ -247,8 +251,7 @@ class BertCustomizer():
                 inputs=[bert_model.input, additional_model.input], outputs=combined_net_output)
 
         else:
-            tf.keras.layers.Dense(
-                self.info["target_label_count"], activation="softmax", name='classifier')(bert_net)
+            bert_net = tf.keras.layers.Dense(self.info["target_label_count"], activation="softmax", name='classifier')(bert_net)
             model = tf.keras.Model(inputs=bert_text_input, outputs=bert_net)
 
         tf.keras.utils.plot_model(model, to_file='./model_structure.png',
@@ -256,8 +259,13 @@ class BertCustomizer():
 
         self.model = model
 
-    def compile(self):
-        self.model.compile(optimizer="Adam",
+    def compile(self, num_train_steps: int, num_warmup_steps: int, init_lr: float = 3e-5):
+        optimizer = optimization.create_optimizer(init_lr=init_lr,
+                                                  num_train_steps=num_train_steps,
+                                                  num_warmup_steps=num_warmup_steps,
+                                                  optimizer_type='adamw')
+
+        self.model.compile(optimizer=optimizer,
                            loss=tf.keras.losses.CategoricalCrossentropy(
                                from_logits=False,
                                label_smoothing=0.0,
@@ -265,7 +273,12 @@ class BertCustomizer():
                                reduction="auto",
                                name="categorical_crossentropy",
                            ),
-                           metrics=tf.keras.metrics.CategoricalAccuracy(name="categorical_accuracy", dtype=None))
+                           metrics=[tf.keras.metrics.CategoricalAccuracy(name="Acc", dtype=None),
+                                    tf.keras.metrics.TopKCategoricalAccuracy(k=3, name="top3Acc"),
+                                    tf.keras.metrics.TopKCategoricalAccuracy(k=5, name="top5Acc"),
+                                    tf.keras.metrics.TopKCategoricalAccuracy(k=10, name="top10Acc"),
+                                    tf.keras.metrics.TopKCategoricalAccuracy(k=15, name="top15Acc")
+                                    ])
 
     def test(self, text, X_train_pp):
         text = tf.convert_to_tensor([text[0]])
@@ -280,18 +293,31 @@ class BertCustomizer():
         print("\n\n\nTEXT.values", text.values)
         print("\n\n\n")
         text = tf.convert_to_tensor(text.values)
-        X = tf.convert_to_tensor(X.values)
+
         y = tf.convert_to_tensor(y.values)
 
-        def generator():
-            for s1, s2, l in zip(text, X, y):
-                yield {"text": s1, "additional input": s2}, l
+        if type(X) != type(None):
+            X = tf.convert_to_tensor(X.values)
 
-        dataset = tf.data.Dataset.from_generator(
-            generator,
-            output_types=({"text": tf.string, "additional input": tf.int64},
-                          tf.int64))
-        if X.shape[0] < 32:
-            batch_size = 2
-        dataset = dataset.batch(batch_size)
+            def generator():
+                for s1, s2, l in zip(text, X, y):
+                    yield {"text": s1, "additional input": s2}, l
+
+            dataset = tf.data.Dataset.from_generator(
+                generator,
+                output_types=({"text": tf.string, "additional input": tf.int64},
+                              tf.int64))
+
+        else:
+            def generator():
+                for s1, l in zip(text, y):
+                    yield {"text": s1}, l
+            # create a dataset from the generator
+            dataset = tf.data.Dataset.from_generator(
+                generator,
+                output_types=({"text": tf.string},
+                                tf.int64))
+
+        dataset = dataset.batch(self.batch_size)
+
         return dataset

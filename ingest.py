@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from os import listdir
 from os.path import isfile, join
+import re
+
 from db.db import create_db_connection, create_issue_table, insert_issues
 
 
@@ -40,13 +42,25 @@ def read_issues(root_dir: str, owner: str, repo: str):
                 Status: None | str = issue.get("state")
                 ClosedAt: None | str = issue["closed_at"]
                 CreatedAt: None | str = issue["created_at"]
+                RefIssue = extract_issue_ref_from_body(Body)
                 items.append(
                     {"Repo": repo, "Owner": owner, "IssueID": IssueId,
                      "AssigneeLogin": AssigneeLogin,
                      "Title": Title, "Body": Body,
                      "CreatorLogin": CreatorLogin, "Status": Status,
-                     "ClosedAt": ClosedAt, "CreatedAt": CreatedAt})
+                     "ClosedAt": ClosedAt, "CreatedAt": CreatedAt,
+                     "RefIssue": RefIssue})
     return items
+
+def extract_issue_ref_from_body(body: str):
+    # body contains a reference to another issue
+    issue_number_with_rest = body.split("https://github.com/microsoft/vscode/issues/")
+    if len(issue_number_with_rest) == 1:
+        return None
+    reg = re.compile("\d+")
+    issue_ref_number = reg.findall(issue_number_with_rest[1])[0]
+    return issue_ref_number
+
 
 
 def ingest(owner, repo):

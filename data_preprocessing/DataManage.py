@@ -92,6 +92,9 @@ class DataManage:
         self.label_encoder = None
 
         self.info = {}
+        self.X_train_pp = None
+        self.X_val_pp = None
+        self.X_test_pp = None
 
     def split(self, type_check: bool = False, show_info: bool = False):
 
@@ -231,19 +234,10 @@ class DataManage:
         numeric_feature_names = list(
             X_train.select_dtypes(include=numerics).columns)
 
-        print("\n\n\n\nERRORE 1")
-        print(numeric_feature_names)
-        print(X_train)
-
         excluded_from_categorical = numeric_feature_names + \
             list([self.label_col_name]) + list([self.text_col_name])
         categorical_feature_names = [
             feature for feature in list(X_train.columns) if feature not in excluded_from_categorical]
-
-        print("\n\n\n\nERRORE 2")
-        print(excluded_from_categorical)
-        print(categorical_feature_names)
-        print(X_train[categorical_feature_names])
 
         X_train_num = pd.DataFrame()
         X_train_cat = pd.DataFrame()
@@ -324,20 +318,29 @@ class DataManage:
             self.transform()
         return self.X_train_pp, self.X_val_pp, self.X_test_pp, self.y_train_pp, self.y_val_pp, self.y_test_pp
 
+    def remove_html_tags(self):
+        """Remove html tags from a string"""
+        clean = re.compile('<.*?>')
+        if type(self.X_train_text_pp) != pd.Series:
+            self.X_train_text_pp = self.X_train_text.apply(lambda x: re.sub(clean, '', x))
+            self.X_val_text_pp = self.X_val_text.apply(lambda x: re.sub(clean, '', x))
+            self.X_test_text_pp = self.X_test_text.apply(lambda x: re.sub(clean, '', x))
+        else:
+            self.X_train_text_pp = self.X_train_text_pp.apply(lambda x: re.sub(clean, '', x))
+            self.X_val_text_pp = self.X_val_text_pp.apply(lambda x: re.sub(clean, '', x))
+            self.X_test_text_pp = self.X_test_text_pp.apply(lambda x: re.sub(clean, '', x))
+
 
     def remove_special_characters(self):
-        tmp = self.X_train_text.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
-        self.X_train_text_pp = None
-        self.X_train_text_pp = tmp
 
-        tmp = self.X_val_text.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
-        self.X_val_text_pp = None
-        self.X_val_text_pp = tmp
-
-        tmp = self.X_test_text.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
-        self.X_test_text_pp = None
-        self.X_test_text_pp = tmp
-
+        if type(self.X_train_text_pp) != pd.Series:
+            self.X_train_text_pp = self.X_train_text.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
+            self.X_val_text_pp = self.X_val_text.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
+            self.X_test_text_pp = self.X_test_text.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
+        else:
+            self.X_train_text_pp = self.X_train_text_pp.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
+            self.X_val_text_pp = self.X_val_text_pp.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
+            self.X_test_text_pp = self.X_test_text_pp.apply(lambda x: re.sub(r'[^a-zA-Z0-9\s]', '', x))
 
     def remove_stopwords(self):
         stop_words = set(stopwords.words('english'))
@@ -363,7 +366,26 @@ class DataManage:
             self.X_test_text_pp.update(self.X_test_text_pp.apply(lambda x: [item for item in str(
                 x).split() if item not in stop_words]))
 
+    # Low case
+    def to_lowercase(self):
 
+        if type(self.X_train_text_pp) != pd.Series:
+
+            self.X_train_text_pp = self.X_train_text.apply(lambda x: [item.lower() for item in str(
+                x).split()])
+
+            self.X_val_text_pp = self.X_val_text.apply(lambda x: [item.lower() for item in str(
+                x).split()])
+
+            self.X_test_text_pp = self.X_test_text.apply(lambda x: [item.lower() for item in str(
+                x).split()])
+
+        else:
+            self.X_train_text_pp.update(self.X_train_text_pp.apply(lambda x: [item.lower() for item in x]))
+
+            self.X_val_text_pp.update(self.X_val_text_pp.apply(lambda x: [item.lower() for item in x]))
+
+            self.X_test_text_pp.update(self.X_test_text_pp.apply(lambda x: [item.lower() for item in x]))
 
     # Stemming
 
